@@ -26,9 +26,6 @@ void middleware::MyMiddleware::before_handle(crow::request &req,
     return;
   }
   parseCookies(req, ctx);
-  if (ctx.userIdToken.empty()) {
-    resp.end();
-  }
 }
 
 void middleware::MyMiddleware::parseCookies(const crow::request &req,

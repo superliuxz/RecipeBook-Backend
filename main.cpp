@@ -58,9 +58,23 @@ int main() {
       }
   );
 
+  CROW_ROUTE(app, "/signup").methods("OPTIONS"_method)(
+      [](const crow::request &req, crow::response &resp) {
+        resp.set_header("Access-Control-Allow-Headers", "Content-Type");
+        resp.end();
+      }
+  );
+
   CROW_ROUTE(app, "/signup").methods("POST"_method)(
       [](const crow::request &req) {
         return handleAuth(req, signUpEndpoint);
+      }
+  );
+
+  CROW_ROUTE(app, "/login").methods("OPTIONS"_method)(
+      [](const crow::request &req, crow::response &resp) {
+        resp.set_header("Access-Control-Allow-Headers", "Content-Type");
+        resp.end();
       }
   );
 
@@ -74,7 +88,6 @@ int main() {
   CROW_ROUTE(app, "/get-recipes").methods("GET"_method)(
       [&app](const crow::request &req) {
         auto ctx = app.get_context<middleware::MyMiddleware>(req);
-        CROW_LOG_INFO << "user token: " + ctx.userIdToken;
         auto r = cpr::Get(
             cpr::Url{firebaseUrl + recipesEndpoint},
             cpr::Parameters{{"auth", ctx.userIdToken}}
@@ -85,17 +98,102 @@ int main() {
       }
   );
 
-  // Add or update a single recipe.
+  // https://stackoverflow.com/questions/38375124/what-is-the-reason-behind-using-option-request-before-post-on-cors-requests
+  // https://stackoverflow.com/questions/32500073/request-header-field-access-control-allow-headers-is-not-allowed-by-itself-in-pr
+  CROW_ROUTE(app, "/recipe").methods("OPTIONS"_method)(
+      [](const crow::request &req, crow::response &resp) {
+        resp.set_header("Access-Control-Allow-Headers", "Content-Type");
+        resp.end();
+      }
+  );
+
+  // POST -> put a new recipe
   CROW_ROUTE(app, "/recipe").methods("POST"_method)(
-      []() {
-        return "Update or add recipe.";
+      [&app](const crow::request &req) {
+        auto ctx = app.get_context<middleware::MyMiddleware>(req);
+
+        auto r = cpr::Post(
+            cpr::Url{firebaseUrl + recipesEndpoint},
+            cpr::Parameters{{"auth", ctx.userIdToken}},
+            cpr::Body{req.body},
+            cpr::Header{{"Content-Type", "application/json"}}
+        );
+        CROW_LOG_INFO << r.status_code;
+        auto existingRecipes = crow::json::load(r.text);
+        CROW_LOG_INFO << existingRecipes;
+        return crow::response(r.status_code, existingRecipes);
+      }
+  );
+
+  CROW_ROUTE(app, "/recipe/<string>").methods("OPTIONS"_method)(
+      [](const crow::request &req,
+         crow::response &resp,
+         const std::string &recipeId) {
+        resp.set_header("Access-Control-Allow-Headers", "Content-Type");
+        resp.end();
+      }
+  );
+
+  // PATCH -> update an existing recipe.
+  CROW_ROUTE(app, "/recipe/<string>").methods("PATCH"_method)(
+      [&app](const crow::request &req, const std::string &recipeId) {
+        const std::string url(firebaseUrl + "recipes/" + recipeId + ".json");
+        auto ctx = app.get_context<middleware::MyMiddleware>(req);
+        auto r = cpr::Get(
+            cpr::Url{url},
+            cpr::Parameters{{"auth", ctx.userIdToken}}
+        );
+        if (r.text.empty()) {
+          return crow::response(400, "Request recipe does not exist!");
+        }
+        r = cpr::Patch(
+            cpr::Url{url},
+            cpr::Parameters{{"auth", ctx.userIdToken}},
+            cpr::Body{req.body},
+            cpr::Header{{"Content-Type", "application/json"}}
+        );
+        return crow::response(r.status_code, crow::json::load(r.text));
+      }
+  );
+
+  // DELETE -> update an existing recipe.
+  CROW_ROUTE(app, "/recipe/<string>").methods("DELETE"_method)(
+      [&app](const crow::request &req, const std::string &recipeId) {
+        const std::string url(firebaseUrl + "recipes/" + recipeId + ".json");
+        auto ctx = app.get_context<middleware::MyMiddleware>(req);
+        auto r = cpr::Get(
+            cpr::Url{url},
+            cpr::Parameters{{"auth", ctx.userIdToken}}
+        );
+        if (r.text.empty()) {
+          return crow::response(400, "Request recipe does not exist!");
+        }
+        r = cpr::Delete(
+            cpr::Url{url},
+            cpr::Parameters{{"auth", ctx.userIdToken}}
+        );
+        return crow::response(r.status_code);
       }
   );
 
   // Get all shopping list items.
   CROW_ROUTE(app, "/get-shopping-list").methods("GET"_method)(
-      []() {
-        return "all shopping list items";
+      [&app](const crow::request &req) {
+        auto ctx = app.get_context<middleware::MyMiddleware>(req);
+        auto r = cpr::Get(
+            cpr::Url{firebaseUrl + shoppingListEndpoint},
+            cpr::Parameters{{"auth", ctx.userIdToken}}
+        );
+        CROW_LOG_INFO << r.status_code;
+        CROW_LOG_INFO << r.text;
+        return crow::response(r.status_code, crow::json::load(r.text));
+      }
+  );
+
+  CROW_ROUTE(app, "/shopping-list-item").methods("OPTIONS"_method)(
+      [](const crow::request &req, crow::response &resp) {
+        resp.set_header("Access-Control-Allow-Headers", "Content-Type");
+        resp.end();
       }
   );
 
